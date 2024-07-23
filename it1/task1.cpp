@@ -17,7 +17,7 @@
 // Partial geometric mean log
 double geometric_mean_log_divisors(int n) {
 	int count = 0;
-    double result = 1;
+	double result = 1;
 	std::set <int> deviders;
 
 	for (int i = 2; i <= n; ++i) {
