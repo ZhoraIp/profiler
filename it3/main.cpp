@@ -27,6 +27,7 @@ int main(int argc, char *argv[]) {
     bool count_set = false;
     bool record_set = false;
 
+	// Parse command line arguments
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "-time") == 0 && i + 1 < argc) {
             sleep_time = std::atoi(argv[++i]);
@@ -62,6 +63,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+	// Prepare arguments for execvp
     std::vector<char*> exec_args;
     for (auto &arg : program_args) {
         exec_args.push_back(&arg[0]);
@@ -128,6 +130,8 @@ int main(int argc, char *argv[]) {
                 ++i;
             }
 
+
+			// Poll for events
             int poll_result = poll(poll_fds.data(), poll_fds.size(), -1);
             if (poll_result == -1) {
                 error_and_exit("poll");
@@ -144,6 +148,8 @@ int main(int argc, char *argv[]) {
                 }
             }
 
+
+			// Check if the child process has exited
             int status;
             pid_t ret = waitpid(pid, &status, WNOHANG);
             if (ret == pid) {
@@ -156,6 +162,7 @@ int main(int argc, char *argv[]) {
 
         std::cout << "Elapsed time: " << elapsed_ms.count() << " milliseconds\n";
 
+		// Read final counts and clean up
         if (count_set) {
             ioctl(count_event_perf->fd, PERF_EVENT_IOC_DISABLE, 0);
             count_event_perf->read_count();

@@ -3,6 +3,8 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 
+
+// Constructor for PerfEvent
 PerfEvent::PerfEvent(const std::string &event_name, bool is_sampling, pid_t pid, uint64_t sample_period)
     : event_name(event_name), is_sampling(is_sampling), pid(pid), sample_period(sample_period) {
     struct perf_event_attr pe;
@@ -24,7 +26,7 @@ PerfEvent::PerfEvent(const std::string &event_name, bool is_sampling, pid_t pid,
     if (is_sampling) {
         pe.sample_period = sample_period;
         pe.sample_type = PERF_SAMPLE_IP | PERF_SAMPLE_TID;
-        pe.wakeup_events = 1; // Wake up every 1 event
+        pe.wakeup_events = 1;
     }
 
     pe.disabled = 1;
@@ -48,6 +50,7 @@ PerfEvent::PerfEvent(const std::string &event_name, bool is_sampling, pid_t pid,
     ioctl(fd, PERF_EVENT_IOC_ENABLE, 0);
 }
 
+// Destructor for PerfEvent
 PerfEvent::~PerfEvent() {
     if (is_sampling && mmap_buffer) {
         munmap(mmap_buffer, BUFFER_SIZE);
@@ -55,6 +58,7 @@ PerfEvent::~PerfEvent() {
     close(fd);
 }
 
+// Read event count
 void PerfEvent::read_count() {
     long long count;
     if (read(fd, &count, sizeof(long long)) == -1) {
@@ -63,6 +67,7 @@ void PerfEvent::read_count() {
     std::cout << "Event count (" << event_name << ") for PID " << pid << ": " << count << "\n";
 }
 
+// Read and process samples
 void PerfEvent::read_samples(std::unordered_map<int, PerfEvent*> &events_map) {
     struct perf_event_mmap_page *header = (struct perf_event_mmap_page *)mmap_buffer;
     char *data = (char *)mmap_buffer + header->data_offset;
@@ -94,7 +99,7 @@ void PerfEvent::read_samples(std::unordered_map<int, PerfEvent*> &events_map) {
 
             // Remove and delete the PerfEvent for the exited process
             for (auto it = events_map.begin(); it != events_map.end(); ++it) {
-                if (it->second->pid == static_cast<pid_t>(exit.pid)) { // исправление типа
+                if (it->second->pid == static_cast<pid_t>(exit.pid)) {
                     delete it->second;
                     events_map.erase(it);
                     break;
