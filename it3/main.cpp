@@ -63,7 +63,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-	// Prepare arguments for execvp
+    // Prepare arguments for execvp
     std::vector<char*> exec_args;
     for (auto &arg : program_args) {
         exec_args.push_back(&arg[0]);
@@ -131,7 +131,7 @@ int main(int argc, char *argv[]) {
             }
 
 
-			// Poll for events
+	    // Poll for events
             int poll_result = poll(poll_fds.data(), poll_fds.size(), -1);
             if (poll_result == -1) {
                 error_and_exit("poll");
@@ -139,17 +139,12 @@ int main(int argc, char *argv[]) {
 
             for (const auto& pfd : poll_fds) {
                 if (pfd.revents & POLLIN) {
-                    // Disable event to pause profiling
-                    ioctl(pfd.fd, PERF_EVENT_IOC_DISABLE, 0);
                     events_map[pfd.fd]->read_samples(events_map);
-
-                    // Re-enable event after processing
-                    ioctl(pfd.fd, PERF_EVENT_IOC_ENABLE, 0);
                 }
             }
 
 
-			// Check if the child process has exited
+	    // Check if the child process has exited
             int status;
             pid_t ret = waitpid(pid, &status, WNOHANG);
             if (ret == pid) {
@@ -162,7 +157,7 @@ int main(int argc, char *argv[]) {
 
         std::cout << "Elapsed time: " << elapsed_ms.count() << " milliseconds\n";
 
-		// Read final counts and clean up
+        // Read final counts and clean up
         if (count_set) {
             ioctl(count_event_perf->fd, PERF_EVENT_IOC_DISABLE, 0);
             count_event_perf->read_count();
