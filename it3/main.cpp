@@ -121,6 +121,7 @@ int main(int argc, char *argv[]) {
         }
         close(pipefd[1]);
 
+
         while (!events_map.empty()) {
             std::vector<struct pollfd> poll_fds(events_map.size());
             int i = 0;
@@ -131,7 +132,7 @@ int main(int argc, char *argv[]) {
             }
 
 
-	    // Poll for events
+			// Poll for events
             int poll_result = poll(poll_fds.data(), poll_fds.size(), -1);
             if (poll_result == -1) {
                 error_and_exit("poll");
@@ -139,17 +140,17 @@ int main(int argc, char *argv[]) {
 
             for (const auto& pfd : poll_fds) {
                 if (pfd.revents & POLLIN) {
-                    events_map[pfd.fd]->read_samples(events_map);
+                    if (events_map[pfd.fd] != nullptr) {
+						events_map[pfd.fd]->read_samples(events_map);
+                    }
+                }
+                if (pfd.revents & POLLHUP) {
+                    close(pfd.fd);
+					delete events_map[pfd.fd];
+                    events_map.erase(pfd.fd);
                 }
             }
 
-
-	    // Check if the child process has exited
-            int status;
-            pid_t ret = waitpid(pid, &status, WNOHANG);
-            if (ret == pid) {
-                break;
-            }
         }
 
         auto end = std::chrono::steady_clock::now();

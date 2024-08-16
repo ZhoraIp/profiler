@@ -2,6 +2,7 @@
 #include <sys/mman.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
+#include <errno.h>
 
 
 // Constructor for PerfEvent
@@ -36,7 +37,13 @@ PerfEvent::PerfEvent(const std::string &event_name, bool is_sampling, pid_t pid,
 
     fd = perf_event_open(&pe, pid, -1, -1, 0);
     if (fd == -1) {
-        error_and_exit("perf_event_open");
+    	if (errno == ESRCH) {
+			std::cerr << "Process is too fast. Unable to attach to PID " << pid << ".\n";
+    	} else {
+			error_and_exit("perf_event_open");
+        }
+        fd = -1;
+        return;
     }
 
     if (is_sampling) {
@@ -46,8 +53,10 @@ PerfEvent::PerfEvent(const std::string &event_name, bool is_sampling, pid_t pid,
         }
     }
 
-    ioctl(fd, PERF_EVENT_IOC_RESET, 0);
-    ioctl(fd, PERF_EVENT_IOC_ENABLE, 0);
+	if (fd != -1) {
+		ioctl(fd, PERF_EVENT_IOC_RESET, 0);
+		ioctl(fd, PERF_EVENT_IOC_ENABLE, 0);
+    }
 }
 
 // Destructor for PerfEvent
@@ -55,11 +64,17 @@ PerfEvent::~PerfEvent() {
     if (is_sampling && mmap_buffer) {
         munmap(mmap_buffer, BUFFER_SIZE);
     }
-    close(fd);
+    if (fd != -1) {
+		close(fd);
+	}
 }
 
 // Read event count
 void PerfEvent::read_count() {
+	if (fd == -1) {
+		return;
+	}
+
     long long count;
     if (read(fd, &count, sizeof(long long)) == -1) {
         error_and_exit("read");
@@ -69,14 +84,24 @@ void PerfEvent::read_count() {
 
 // Read and process samples
 void PerfEvent::read_samples(std::unordered_map<int, PerfEvent*> &events_map) {
+	if (mmap_buffer == nullptr || fd == -1) {
+		return;
+	}
+
     struct perf_event_mmap_page *header = (struct perf_event_mmap_page *)mmap_buffer;
     char *data = (char *)mmap_buffer + header->data_offset;
     uint64_t data_head = header->data_head;
     asm volatile("" ::: "memory");
     uint64_t data_tail = header->data_tail;
 
-    while (data_tail != data_head) {
+    if (data_tail >= data_head || data_tail >= BUFFER_SIZE) {
+        std::cerr << "Buffer overrun detected.\n";
+        //error_and_exit("overflow");
+    }
+
+    while (data_tail < data_head) {
         struct perf_event_header *event = (struct perf_event_header *)(data + (data_tail & (BUFFER_SIZE - 1)));
+		if (event == nullptr) return;
         if (event->type == PERF_RECORD_SAMPLE) {
             uint64_t ip;
             memcpy(&ip, (char *)event + sizeof(struct perf_event_header), sizeof(uint64_t));
@@ -91,24 +116,17 @@ void PerfEvent::read_samples(std::unordered_map<int, PerfEvent*> &events_map) {
 
             // Create a new PerfEvent for the forked process
             PerfEvent* new_event = new PerfEvent(event_name, is_sampling, fork.pid, sample_period);
-            events_map[new_event->fd] = new_event;
-        } else if (event->type == PERF_RECORD_EXIT) {
-            struct { uint32_t pid, ppid, tid, ptid; } exit;
-            memcpy(&exit, (char *)event + sizeof(struct perf_event_header), sizeof(exit));
-            std::cout << "EXIT event: PID " << exit.pid << " PPID " << exit.ppid << "\n";
-
-            // Remove and delete the PerfEvent for the exited process
-            for (auto it = events_map.begin(); it != events_map.end(); ++it) {
-                if (it->second->pid == static_cast<pid_t>(exit.pid)) {
-                    delete it->second;
-                    events_map.erase(it);
-                    break;
-                }
+            if (new_event->fd != -1) {
+				events_map[new_event->fd] = new_event;
+            } else {
+				delete new_event;
             }
         } else {
-            std::cout << "Other event type: " << event->type << "\n";
+            //std::cout << "Other event type: " << event->type << "\n";
+            data_tail += event->size;
+            break;
         }
-        data_tail += event->size;
+		data_tail += event->size;
     }
 
     header->data_tail = data_tail;
