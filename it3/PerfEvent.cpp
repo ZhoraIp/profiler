@@ -34,6 +34,7 @@ PerfEvent::PerfEvent(const std::string &event_name, bool is_sampling, pid_t pid,
     pe.exclude_kernel = 1;
     pe.exclude_hv = 1;
     pe.task = 1; // To track FORK and EXIT events
+    pe.mmap = 1; // To tracl MMAP events
 
     fd = perf_event_open(&pe, pid, -1, -1, 0);
     if (fd == -1) {
@@ -79,11 +80,11 @@ void PerfEvent::read_count() {
     if (read(fd, &count, sizeof(long long)) == -1) {
         error_and_exit("read");
     }
-    std::cout << "Event count (" << event_name << ") for PID " << pid << ": " << count << "\n";
+    std::cout << "Event count (" << event_name << ") for PID " << pid << ": " << count << "\n\n";
 }
 
 // Read and process samples
-void PerfEvent::read_samples(std::unordered_map<int, PerfEvent*> &events_map) {
+void PerfEvent::read_samples(std::unordered_map<int, PerfEvent*> &events_map, std::unordered_map<std::string, int> &global_histogram, std::map<uint64_t, std::pair<uint64_t, std::string>> &global_mmap_records, std::unordered_map<uint64_t, int> &global_ip_histogram) {
 	if (mmap_buffer == nullptr || fd == -1) {
 		return;
 	}
@@ -94,10 +95,6 @@ void PerfEvent::read_samples(std::unordered_map<int, PerfEvent*> &events_map) {
     asm volatile("" ::: "memory");
     uint64_t data_tail = header->data_tail;
 
-    if (data_tail >= data_head || data_tail >= BUFFER_SIZE) {
-        std::cerr << "Buffer overrun detected.\n";
-        //error_and_exit("overflow");
-    }
 
     while (data_tail < data_head) {
         struct perf_event_header *event = (struct perf_event_header *)(data + (data_tail & (BUFFER_SIZE - 1)));
@@ -108,7 +105,23 @@ void PerfEvent::read_samples(std::unordered_map<int, PerfEvent*> &events_map) {
             uint32_t pid, tid;
             memcpy(&pid, (char *)event + sizeof(struct perf_event_header) + sizeof(uint64_t), sizeof(uint32_t));
             memcpy(&tid, (char *)event + sizeof(struct perf_event_header) + sizeof(uint64_t) + sizeof(uint32_t), sizeof(uint32_t));
-            std::cout << "IP: " << std::hex << ip << std::dec << " PID: " << pid << "\n";
+            // std::cout << "IP: " << std::hex << ip << std::dec << " PID: " << pid << "\n";
+
+            uint64_t *sample = (uint64_t *)((uint8_t *)event + sizeof(struct perf_event_header));
+            ip = *sample;
+
+			// Updating global ip hist
+            global_ip_histogram[ip]++;
+
+            // Updating global lib hist
+            for (const auto& [start_addr, info] : global_mmap_records) {
+                const auto& [end_addr, filename] = info;
+                if (ip >= start_addr && ip < end_addr) {
+                    global_histogram[filename]++;
+                    break;
+                }
+            }
+
         } else if (event->type == PERF_RECORD_FORK) {
             struct { uint32_t pid, ppid, tid, ptid; } fork;
             memcpy(&fork, (char *)event + sizeof(struct perf_event_header), sizeof(fork));
@@ -121,8 +134,27 @@ void PerfEvent::read_samples(std::unordered_map<int, PerfEvent*> &events_map) {
             } else {
 				delete new_event;
             }
+        } else if (event->type == PERF_RECORD_MMAP) {
+            struct {
+                struct perf_event_header header;
+                uint32_t pid, tid;
+                uint64_t addr, len, pgoff;
+                char filename[256];
+            } *mmap_event = (decltype(mmap_event)) event;
+
+            uint64_t start_addr = mmap_event->addr;
+            uint64_t end_addr = start_addr + mmap_event->len;
+
+            // Updating mmap records
+            global_mmap_records[start_addr] = {end_addr, mmap_event->filename};
+
+
+            // Mmap info
+            /* std::cout << "mmap event: pid=" << mmap_event->pid << ", tid=" << mmap_event->tid
+                      << ", addr=" << mmap_event->addr << ", len=" << mmap_event->len
+                      << ", pgoff=" << mmap_event->pgoff << ", filename=" << mmap_event->filename << std::endl; */
         } else {
-            //std::cout << "Other event type: " << event->type << "\n";
+            // std::cout << "Other event type: " << event->type << "\n";
             data_tail += event->size;
             break;
         }

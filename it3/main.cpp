@@ -11,6 +11,28 @@
 #include <poll.h>
 #include "PerfEvent.h"
 #include "utils.h"
+#include <map>
+#include <unordered_map>
+
+
+std::unordered_map<std::string, int> global_histogram;
+
+std::map<uint64_t, std::pair<uint64_t, std::string>> global_mmap_records;
+
+std::unordered_map<uint64_t, int> global_ip_histogram;
+
+void print_global_histogram() {
+    std::cout << "Global histogram of frequently visited code sections and modules:\n";
+    for (const auto& entry : global_histogram) {
+        std::cout << "Module: " << entry.first << ", Hits: " << entry.second << "\n";
+    }
+
+    std::cout << "\nGlobal histogram of frequently visited IP addresses:\n";
+    for (const auto& entry : global_ip_histogram) {
+        std::cout << "Address: 0x" << std::hex << entry.first << std::dec << ", Hits: " << entry.second << "\n";
+    }
+}
+
 
 int main(int argc, char *argv[]) {
     if (argc < 3) {
@@ -141,7 +163,7 @@ int main(int argc, char *argv[]) {
             for (const auto& pfd : poll_fds) {
                 if (pfd.revents & POLLIN) {
                     if (events_map[pfd.fd] != nullptr) {
-						events_map[pfd.fd]->read_samples(events_map);
+						events_map[pfd.fd]->read_samples(events_map, global_histogram, global_mmap_records, global_ip_histogram);
                     }
                 }
                 if (pfd.revents & POLLHUP) {
@@ -170,6 +192,8 @@ int main(int argc, char *argv[]) {
             delete pair.second;
         }
     }
+
+    print_global_histogram();
 
     return 0;
 }
