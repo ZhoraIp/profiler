@@ -40,9 +40,9 @@ PerfEvent::PerfEvent(const std::string &event_name, bool is_sampling, pid_t pid,
     fd = perf_event_open(&pe, pid, -1, -1, 0);
     if (fd == -1) {
     	if (errno == ESRCH) {
-			std::cerr << "Process is too fast. Unable to attach to PID " << pid << ".\n";
+		std::cerr << "Process is too fast. Unable to attach to PID " << pid << ".\n";
     	} else {
-			error_and_exit("perf_event_open");
+		error_and_exit("perf_event_open");
         }
         fd = -1;
         return;
@@ -55,9 +55,9 @@ PerfEvent::PerfEvent(const std::string &event_name, bool is_sampling, pid_t pid,
         }
     }
 
-	if (fd != -1) {
-		ioctl(fd, PERF_EVENT_IOC_RESET, 0);
-		ioctl(fd, PERF_EVENT_IOC_ENABLE, 0);
+    if (fd != -1) {
+	ioctl(fd, PERF_EVENT_IOC_RESET, 0);
+	ioctl(fd, PERF_EVENT_IOC_ENABLE, 0);
     }
 }
 
@@ -67,15 +67,15 @@ PerfEvent::~PerfEvent() {
         munmap(mmap_buffer, BUFFER_SIZE);
     }
     if (fd != -1) {
-		close(fd);
-	}
+	close(fd);
+    }
 }
 
 // Read event count
 void PerfEvent::read_count() {
-	if (fd == -1) {
-		return;
-	}
+    if (fd == -1) {
+	return;
+    }
 
     long long count;
     if (read(fd, &count, sizeof(long long)) == -1) {
@@ -86,9 +86,9 @@ void PerfEvent::read_count() {
 
 // Read and process samples
 void PerfEvent::read_samples(std::unordered_map<int, PerfEvent*> &events_map, std::unordered_map<std::string, int> &global_histogram, std::map<uint64_t, std::pair<uint64_t, std::string>> &global_mmap_records, std::unordered_map<uint64_t, int> &global_ip_histogram) {
-	if (mmap_buffer == nullptr || fd == -1) {
-		return;
-	}
+    if (mmap_buffer == nullptr || fd == -1) {
+	return;
+    }
 
     struct perf_event_mmap_page *header = (struct perf_event_mmap_page *)mmap_buffer;
     char *data = (char *)mmap_buffer + header->data_offset;
@@ -99,7 +99,7 @@ void PerfEvent::read_samples(std::unordered_map<int, PerfEvent*> &events_map, st
 
     while (data_tail < data_head) {
         struct perf_event_header *event = (struct perf_event_header *)(data + (data_tail & (BUFFER_SIZE - 1)));
-		if (event == nullptr) return;
+	if (event == nullptr) return;
         if (event->type == PERF_RECORD_SAMPLE) {
             // The sample contains the IP and TID (pid/tid) data
             uint64_t ip;
@@ -112,7 +112,7 @@ void PerfEvent::read_samples(std::unordered_map<int, PerfEvent*> &events_map, st
             uint64_t *sample = (uint64_t *)((uint8_t *)event + sizeof(struct perf_event_header));
             ip = *sample;
 
-			// Updating global ip hist
+	    // Updating global ip hist
             global_ip_histogram[ip]++;
 
             // Updating global lib hist
@@ -132,9 +132,9 @@ void PerfEvent::read_samples(std::unordered_map<int, PerfEvent*> &events_map, st
             // Create a new PerfEvent for the forked process
             PerfEvent* new_event = new PerfEvent(event_name, is_sampling, fork.pid, sample_period);
             if (new_event->fd != -1) {
-				events_map[new_event->fd] = new_event;
+		events_map[new_event->fd] = new_event;
             } else {
-				delete new_event;
+		delete new_event;
             }
         } else if (event->type == PERF_RECORD_MMAP) {
             struct {
@@ -170,7 +170,7 @@ void PerfEvent::read_samples(std::unordered_map<int, PerfEvent*> &events_map, st
             data_tail += event->size;
             break;
         }
-		data_tail += event->size;
+	    data_tail += event->size;
     }
 
     header->data_tail = data_tail;

@@ -49,7 +49,7 @@ int main(int argc, char *argv[]) {
     bool count_set = false;
     bool record_set = false;
 
-	// Parse command line arguments
+    // Parse command line arguments
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "-time") == 0 && i + 1 < argc) {
             sleep_time = std::atoi(argv[++i]);
@@ -154,7 +154,7 @@ int main(int argc, char *argv[]) {
             }
 
 
-			// Poll for events
+	    // Poll for events
             int poll_result = poll(poll_fds.data(), poll_fds.size(), -1);
             if (poll_result == -1) {
                 error_and_exit("poll");
@@ -163,12 +163,12 @@ int main(int argc, char *argv[]) {
             for (const auto& pfd : poll_fds) {
                 if (pfd.revents & POLLIN) {
                     if (events_map[pfd.fd] != nullptr) {
-						events_map[pfd.fd]->read_samples(events_map, global_histogram, global_mmap_records, global_ip_histogram);
+			events_map[pfd.fd]->read_samples(events_map, global_histogram, global_mmap_records, global_ip_histogram);
                     }
                 }
                 if (pfd.revents & POLLHUP) {
                     close(pfd.fd);
-					delete events_map[pfd.fd];
+		    delete events_map[pfd.fd];
                     events_map.erase(pfd.fd);
                 }
             }
