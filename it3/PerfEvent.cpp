@@ -35,6 +35,7 @@ PerfEvent::PerfEvent(const std::string &event_name, bool is_sampling, pid_t pid,
     pe.exclude_hv = 1;
     pe.task = 1; // To track FORK and EXIT events
     pe.mmap = 1; // To tracl MMAP events
+    pe.comm = 1;
 
     fd = perf_event_open(&pe, pid, -1, -1, 0);
     if (fd == -1) {
@@ -100,6 +101,7 @@ void PerfEvent::read_samples(std::unordered_map<int, PerfEvent*> &events_map, st
         struct perf_event_header *event = (struct perf_event_header *)(data + (data_tail & (BUFFER_SIZE - 1)));
 		if (event == nullptr) return;
         if (event->type == PERF_RECORD_SAMPLE) {
+            // The sample contains the IP and TID (pid/tid) data
             uint64_t ip;
             memcpy(&ip, (char *)event + sizeof(struct perf_event_header), sizeof(uint64_t));
             uint32_t pid, tid;
@@ -150,9 +152,19 @@ void PerfEvent::read_samples(std::unordered_map<int, PerfEvent*> &events_map, st
 
 
             // Mmap info
-            /* std::cout << "mmap event: pid=" << mmap_event->pid << ", tid=" << mmap_event->tid
+            std::cout << "mmap event: pid=" << mmap_event->pid << ", tid=" << mmap_event->tid
                       << ", addr=" << mmap_event->addr << ", len=" << mmap_event->len
-                      << ", pgoff=" << mmap_event->pgoff << ", filename=" << mmap_event->filename << std::endl; */
+                      << ", pgoff=" << mmap_event->pgoff << ", filename=" << mmap_event->filename << std::endl; 
+        } else if (event->type == PERF_RECORD_COMM) {
+            struct {
+                struct perf_event_header header;
+                uint32_t pid, tid;
+                char comm[16];
+            } *comm_event = (decltype(comm_event)) event;
+
+            // Print COMM event info
+            std::cout << "COMM event: Process " << comm_event->pid 
+                      << " changed name to " << comm_event->comm << "\n";
         } else {
             // std::cout << "Other event type: " << event->type << "\n";
             data_tail += event->size;

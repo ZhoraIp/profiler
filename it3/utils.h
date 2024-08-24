@@ -9,7 +9,7 @@
 #include <linux/perf_event.h>
 #include <asm/unistd.h>
 
-#define BUFFER_SIZE (20 * 1024) // Размер буфера кольцевого буфера mmap
+#define BUFFER_SIZE (20 * 1024) // Mmap buffer size 
 
 inline void error_and_exit(const std::string &msg) {
     perror(msg.c_str());
